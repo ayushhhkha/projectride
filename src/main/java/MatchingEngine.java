@@ -6,6 +6,18 @@ public class MatchingEngine {
             RideRequest request,
             List<Driver> drivers) {
 
+        return findNearestDriver(request, drivers, Double.MAX_VALUE);
+    }
+
+    /**
+     
+     * @param maxDistanceKm maximum acceptable distance in kilometers pass Double.MAX_VALUE for no limit
+     */
+    public Driver findNearestDriver(
+            RideRequest request,
+            List<Driver> drivers,
+            double maxDistanceKm) {
+
         Driver nearestDriver = null;
         double shortestDistance = Double.MAX_VALUE;
 
@@ -15,10 +27,12 @@ public class MatchingEngine {
                 continue;
             }
 
-            double distance = calculateDistance(
-                    request.getPickup(),
-                    driver.getLocation()
-            );
+            double distance =
+                    driver.getLocation().distanceTo(request.getPickup());
+
+            if (distance > maxDistanceKm) {
+                continue;
+            }
 
             if (distance < shortestDistance) {
                 shortestDistance = distance;
@@ -27,21 +41,5 @@ public class MatchingEngine {
         }
 
         return nearestDriver;
-    }
-
-    private double calculateDistance(
-            Location a,
-            Location b) {
-
-        double latitudeDifference =
-                a.getLatitude() - b.getLatitude();
-
-        double longitudeDifference =
-                a.getLongitude() - b.getLongitude();
-
-        return Math.sqrt(
-                latitudeDifference * latitudeDifference
-                + longitudeDifference * longitudeDifference
-        );
     }
 }
