@@ -28,14 +28,21 @@ public class Main {
                 new Location(52.0900, 4.3200)
         );
 
-        MatchingEngine engine =
-                new MatchingEngine();
+        // Baseline: linear scan over every driver
+        MatchingEngine engine = new MatchingEngine();
+        Driver matched = engine.findNearestDriver(request, drivers);
 
-        Driver matched =
-                engine.findNearestDriver(request, drivers);
+        System.out.println("[Linear scan]  Matched driver: " + matched.getId());
 
-        System.out.println(
-                "Matched driver: " + matched.getId()
-        );
+        // Phase 3: spatial grid, only checks drivers near the pickup point
+        SpatialGrid grid = new SpatialGrid(1.0, 52.07);
+
+        for (Driver driver : drivers) {
+            grid.insert(driver);
+        }
+
+        Driver gridMatched = grid.findNearestDriver(request);
+
+        System.out.println("[Spatial grid] Matched driver: " + gridMatched.getId());
     }
 }
