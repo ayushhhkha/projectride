@@ -147,45 +147,6 @@ This is intentional for the initial implementation. The next major optimization 
 
 No external frameworks are currently used.
 
-## Roadmap
-
-### Phase 1 — Basic Matching
-
-* [x] Driver model
-* [x] Location model
-* [x] Ride request model
-* [x] Nearest-driver matching
-* [x] Basic distance calculation
-
-### Phase 2 — Geographic Accuracy
-
-* [x] Haversine distance
-* [x] Geographic validation
-* [x] Distance-based matching
-
-### Phase 3 — Geospatial Indexing
-
-* [ ] Spatial grid
-* [ ] Nearby-driver lookup
-* [ ] Reduce candidate drivers
-* [ ] Benchmark against linear scanning
-
-### Phase 4 — Concurrency
-
-* [ ] Concurrent driver location updates
-* [ ] Concurrent ride requests
-* [ ] Thread-safe driver state
-* [ ] Race-condition testing
-* [ ] ExecutorService-based simulation
-
-### Phase 5 — Performance & Reliability
-
-* [ ] Load testing
-* [ ] Benchmark matching latency
-* [ ] Simulate thousands of drivers
-* [ ] Measure throughput
-* [ ] Optimize memory usage
-
 ## Goal
 
 The goal of this project is to explore the engineering challenges involved in building a **high-throughput, low-latency ride-matching system**.
