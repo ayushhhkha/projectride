@@ -1,26 +1,22 @@
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SpatialGrid {
 
     private static final double KM_PER_DEGREE_LATITUDE = 111.0;
-
     private static final int MAX_RING_SEARCH = 1000;
+    private static final int MAX_RETRIES = 100;
 
     private final double cellSizeKm;
     private final double latDegreesPerCell;
     private final double lonDegreesPerCell;
 
-    private final Map<CellKey, List<Driver>> cells = new HashMap<>();
-    private final Map<Integer, CellKey> driverCells = new HashMap<>();
+    private final Map<CellKey, Set<Driver>> cells = new ConcurrentHashMap<>();
+    private final Map<Integer, CellKey> driverCells = new ConcurrentHashMap<>();
 
-    /**
-     * @param cellSizeKm        
-     * @param referenceLatitude 
-     */
     public SpatialGrid(double cellSizeKm, double referenceLatitude) {
         if (cellSizeKm <= 0) {
             throw new IllegalArgumentException("cellSizeKm must be positive");
@@ -40,33 +36,38 @@ public class SpatialGrid {
     }
 
     public void insert(Driver driver) {
-        CellKey key = cellFor(driver.getLocation());
-        cells.computeIfAbsent(key, k -> new ArrayList<>()).add(driver);
-        driverCells.put(driver.getId(), key);
+        synchronized (driver) {
+            CellKey key = cellFor(driver.getLocation());
+            cells.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet()).add(driver);
+            driverCells.put(driver.getId(), key);
+        }
     }
 
     public void remove(Driver driver) {
-        CellKey key = driverCells.remove(driver.getId());
-        if (key != null) {
-            List<Driver> cellDrivers = cells.get(key);
-            if (cellDrivers != null) {
-                cellDrivers.remove(driver);
+        synchronized (driver) {
+            CellKey key = driverCells.remove(driver.getId());
+            if (key != null) {
+                Set<Driver> cellDrivers = cells.get(key);
+                if (cellDrivers != null) {
+                    cellDrivers.remove(driver);
+                }
             }
         }
     }
 
-    
     public void updateLocation(Driver driver, Location newLocation) {
-        remove(driver);
-        driver.updateLocation(newLocation);
-        insert(driver);
+        synchronized (driver) {
+            remove(driver);
+            driver.updateLocation(newLocation);
+            insert(driver);
+        }
     }
 
     public Driver findNearestDriver(RideRequest request) {
         return findNearestDriver(request, Double.MAX_VALUE);
     }
 
-    
+
     public Driver findNearestDriver(RideRequest request, double maxDistanceKm) {
         Location pickup = request.getPickup();
 
@@ -77,6 +78,8 @@ public class SpatialGrid {
                 ? MAX_RING_SEARCH
                 : (int) Math.ceil(maxDistanceKm / cellSizeKm) + 1;
         ringCap = Math.min(ringCap, MAX_RING_SEARCH);
+
+        int totalDriversInGrid = size();
 
         for (int ring = 0; ring <= ringCap; ring++) {
             List<Driver> candidates = driversInRing(pickup, ring);
@@ -100,12 +103,39 @@ public class SpatialGrid {
             if (bestDriver != null && bestDistance <= guaranteedLowerBoundForNextRing) {
                 break;
             }
+
+            if (candidates.size() >= totalDriversInGrid) {
+                break;
+            }
         }
 
         return bestDriver;
     }
 
-    
+    public Driver matchAndAssign(RideRequest request) {
+        return matchAndAssign(request, Double.MAX_VALUE);
+    }
+
+    public Driver matchAndAssign(RideRequest request, double maxDistanceKm) {
+        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            Driver candidate = findNearestDriver(request, maxDistanceKm);
+
+            if (candidate == null) {
+                return null;
+            }
+
+            if (candidate.tryAssign()) {
+                return candidate;
+            }
+
+        }
+
+        throw new IllegalStateException(
+                "Could not assign a driver after " + MAX_RETRIES
+                        + " attempts. This suggests extreme contention over "
+                        + "a very small pool of available drivers.");
+    }
+
     private List<Driver> driversInRing(Location pickup, int ringRadius) {
         CellKey center = cellFor(pickup);
         List<Driver> result = new ArrayList<>();
@@ -113,7 +143,7 @@ public class SpatialGrid {
         for (int dRow = -ringRadius; dRow <= ringRadius; dRow++) {
             for (int dCol = -ringRadius; dCol <= ringRadius; dCol++) {
                 CellKey key = new CellKey(center.row + dRow, center.col + dCol);
-                List<Driver> cellDrivers = cells.get(key);
+                Set<Driver> cellDrivers = cells.get(key);
                 if (cellDrivers != null) {
                     result.addAll(cellDrivers);
                 }
